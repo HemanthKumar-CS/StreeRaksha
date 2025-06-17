@@ -1,6 +1,6 @@
 # Environment variables - contains sensitive data
 .env
-docs/
+
 .venv/
 .env
 # ML Models (large files)
