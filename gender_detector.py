@@ -90,12 +90,11 @@ class GenderDetector:
             confidence = softmax_values[predicted_class_idx].item()
 
             # Get gender label
-            gender_label = self.model.config.id2label[predicted_class_idx]
-
             # Format as "Male" or "Female"
+            gender_label = self.model.config.id2label[predicted_class_idx]
             # Higher threshold for female classification based on image quality
-            female_threshold = 0.70  # Increased from 0.60
-            male_threshold = 0.50    # Slightly decreased to favor male classification
+            female_threshold = 0.70  # Matches streeraksha.py
+            male_threshold = 0.50    # Matches streeraksha.py
 
             if "female" in gender_label.lower() or "woman" in gender_label.lower() or "f" == gender_label.lower():
                 gender = "Female"

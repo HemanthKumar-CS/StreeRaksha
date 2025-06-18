@@ -231,18 +231,35 @@ class AlertSystem:
                 )
 
                 if distance < self.alert_config['PROXIMITY_THRESHOLD']:
-                    proximity_males += 1
+                    proximity_males += 1            # Alert based on male proximity
+            # Count nearby females to evaluate context
+            nearby_females = 0
+            for other_female in females:
+                if other_female is female:  # Skip the current female
+                    continue
 
-            # Alert based on male proximity
-            if proximity_males >= 3:
+                of_x1, of_y1, of_x2, of_y2 = other_female['bbox']
+                of_center_x = (of_x1 + of_x2) / 2
+                of_center_y = (of_y1 + of_y2) / 2
+
+                distance = np.sqrt(
+                    (f_center_x - of_center_x)**2 +
+                    (f_center_y - of_center_y)**2
+                )
+
+                if distance < self.alert_config['PROXIMITY_THRESHOLD']:
+                    nearby_females += 1
+
+            # Alert logic that considers the ratio of males to females
+            if proximity_males >= 3 and proximity_males > nearby_females:
                 alert_message = "⚠️ Female surrounded by multiple males"
                 alert_level = self.alert_levels["WARNING"]
 
-            elif proximity_males == 2:
+            elif proximity_males >= 2 and proximity_males > nearby_females:
                 alert_message = "⚠️ Female approached by multiple males"
                 alert_level = self.alert_levels["NOTICE"]
 
-            elif proximity_males == 1 and is_night:
+            elif proximity_males == 1 and is_night and nearby_females == 0:
                 alert_message = "⚠️ Female approached by male at night"
                 alert_level = self.alert_levels["NOTICE"]
 

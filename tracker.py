@@ -14,6 +14,7 @@ class PersonTracker:
         self.next_track_id = 0
         self.TRACK_EXPIRATION = track_expiration
         self.MAX_TRACK_DISTANCE = max_track_distance
+        self.MIN_SIZE = 60  # Minimum person size to match the original StreeRakshaDetector
 
     def calculate_iou(self, box1, box2):
         """Calculate Intersection over Union (IoU) between two bounding boxes"""
@@ -51,7 +52,8 @@ class PersonTracker:
 
         return np.sqrt((center1[0] - center2[0])**2 + (center1[1] - center2[1])**2)
 
-    def non_max_suppression(self, boxes, iou_threshold=0.5):
+    # Use 0.4 like the original code
+    def non_max_suppression(self, boxes, iou_threshold=0.4):
         """Non-maximum suppression to remove overlapping boxes"""
         if not boxes:
             return []
@@ -89,27 +91,46 @@ class PersonTracker:
 
     def update_trackers(self, detections, frame, gender_detector=None):
         """Update person trackers with new detections"""
-        # Skip if no detections
+        # Skip if no detections but still update TTL and return existing trackers
         if not detections:
-            return []
+            # Update TTL for all trackers
+            for track_id in list(self.trackers.keys()):
+                self.trackers[track_id]['ttl'] -= 1
+                if self.trackers[track_id]['ttl'] <= 0:
+                    del self.trackers[track_id]
+
+            # Return remaining trackers
+            return self._get_tracked_persons()
 
         # Mark all current tracks as unmatched initially
         unmatched_trackers = list(self.trackers.keys())
         matched_detections = []
 
-        # Match detections to existing trackers
+        # Match detections to existing trackers - exact algorithm from the original streeraksha.py
         for detection_box in detections:
+            # Minimum IoU threshold (higher than default for better stability)
+            best_iou = 0.2
             best_match_id = None
             best_match_distance = float('inf')
 
-            # Find closest tracker
             for track_id in unmatched_trackers:
                 tracker = self.trackers[track_id]
-                distance = self.center_distance(detection_box, tracker['bbox'])
+                track_box = tracker['bbox']
 
-                if distance < self.MAX_TRACK_DISTANCE and distance < best_match_distance:
-                    best_match_distance = distance
+                # Calculate both IoU and center distance
+                iou = self.calculate_iou(detection_box, track_box)
+                distance = self.center_distance(detection_box, track_box)
+
+                # More aggressive matching logic to ensure stable tracking:
+                # 1. Good IoU is the primary criteria (boxes overlapping significantly)
+                # 2. Reasonable IoU with close distance (continuing movement)
+                # 3. Very close centers even with low IoU (fast movements)
+                if (iou > best_iou or
+                    (iou > 0.1 and distance < self.MAX_TRACK_DISTANCE) or
+                        (distance < self.MAX_TRACK_DISTANCE * 0.4 and iou > 0.05)):
+                    best_iou = iou
                     best_match_id = track_id
+                    best_match_distance = distance
 
             # Update matched tracker
             if best_match_id is not None:
@@ -117,9 +138,8 @@ class PersonTracker:
                 self.trackers[best_match_id]['ttl'] = self.TRACK_EXPIRATION
                 unmatched_trackers.remove(best_match_id)
                 matched_detections.append(detection_box)
-
-            # Create new tracker for unmatched detection
             else:
+                # Create new tracker for unmatched detection
                 # Extract person image for gender analysis
                 x1, y1, x2, y2 = detection_box
                 person_img = frame[y1:y2,
@@ -142,7 +162,6 @@ class PersonTracker:
                 self.next_track_id += 1
 
         # Update TTL for unmatched trackers
-        # Use list() to safely modify during iteration
         for track_id in list(unmatched_trackers):
             self.trackers[track_id]['ttl'] -= 1
 
@@ -150,7 +169,10 @@ class PersonTracker:
             if self.trackers[track_id]['ttl'] <= 0:
                 del self.trackers[track_id]
 
-        # Return list of person objects with track info
+        return self._get_tracked_persons()
+
+    def _get_tracked_persons(self):
+        """Helper method to convert tracker dictionary to person list"""
         persons = []
         for track_id, tracker in self.trackers.items():
             person_info = {
@@ -161,5 +183,4 @@ class PersonTracker:
                 'ttl': tracker['ttl']
             }
             persons.append(person_info)
-
         return persons

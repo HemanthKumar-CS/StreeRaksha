@@ -20,37 +20,42 @@ class Visualizer:
             bbox = person['bbox']
             x1, y1, x2, y2 = bbox
             gender = person.get('gender', 'Unknown')
-            gender_confidence = person.get('gender_confidence', 0)
-            track_id = person.get('track_id', 0)
+            gender_confidence = person.get('gender_confidence', 0.0)
+            track_id = person.get('track_id', '')
+            # Set color - Red for female (0,0,255), Blue for male (255,0,0) in BGR
+            color = (0, 0, 255) if gender == "Female" else (255, 0, 0)
 
-            # Draw person bounding box
-            label_color = (255, 0, 0) if gender == "Male" else (
-                255, 0, 255)  # Blue for male, pink for female
-            cv2.rectangle(frame, (x1, y1), (x2, y2), label_color, 2)
+            # Draw bounding box
+            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
 
-            # Draw person label
-            gender_label = f"{gender} ({gender_confidence:.2f})"
-            cv2.putText(frame, f"ID:{track_id} {gender_label}",
-                        (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                        label_color, 1, cv2.LINE_AA)
+            # Add label with gender and confidence
+            label = f"{gender}: {gender_confidence:.2f}"
+            cv2.putText(frame, label, (x1, y1-10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+
+            # Draw track ID if needed
+            if track_id:
+                id_pos = (x1, y1-30) if gender_confidence > 0 else (x1, y1-10)
+                cv2.putText(frame, f"ID:{track_id}", id_pos,
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
 
             # Draw pose labels if any pose detected
             if 'pose' in person:
                 pose = person['pose']
-                pose_text = []
+                pose_alerts = []
                 if pose.get('hands_up', False):
-                    pose_text.append("Hands Up")
+                    pose_alerts.append("Hands Up")
                 if pose.get('lying_down', False):
-                    pose_text.append("Lying Down")
+                    pose_alerts.append("Lying Down")
                 if pose.get('running', False):
-                    pose_text.append("Running")
+                    pose_alerts.append("Running")
                 if pose.get('crouching', False):
-                    pose_text.append("Crouching")
+                    pose_alerts.append("Crouching")
 
-                if pose_text:
-                    cv2.putText(frame, ", ".join(pose_text),
-                                (x1, y2 + 15), cv2.FONT_HERSHEY_SIMPLEX,
-                                0.5, label_color, 1, cv2.LINE_AA)
+                if pose_alerts:
+                    pose_text = " & ".join(pose_alerts)
+                    cv2.putText(frame, pose_text, (x1, y2+15),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
 
         return frame
 

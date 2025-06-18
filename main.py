@@ -170,13 +170,13 @@ def main():
                 for box in boxes:
                     # Get box coordinates
                     x1, y1, x2, y2 = box.xyxy[0].cpu().numpy().astype(int)
+                    # Filter valid detections
                     detections.append((x1, y1, x2, y2))
-
-            # Filter valid detections
             valid_detections = tracker.filter_valid_detections(detections)
 
-            # Apply non-maximum suppression
-            filtered_detections = tracker.non_max_suppression(valid_detections)
+            # Apply non-maximum suppression with lower IoU threshold (0.4) as in original code
+            filtered_detections = tracker.non_max_suppression(
+                valid_detections, iou_threshold=0.4)
 
             # Update person trackers
             persons = tracker.update_trackers(
