@@ -1,6 +1,7 @@
 # Environment variables - contains sensitive data
 .env
-
+debug/
+evidence/
 .venv/
 .env
 # ML Models (large files)

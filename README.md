@@ -8,6 +8,43 @@ StreeRaksha is an AI and IoT-powered platform designed to enhance public safety 
 
 Women face unique safety challenges in public spaces, especially in high-risk areas or during late hours. Traditional surveillance systems are reactive and often fail to prevent incidents. StreeRaksha addresses this gap by using AI and IoT to detect threats in real-time and notify authorities instantly, enabling quicker interventions and empowering women with actionable safety information.
 
+## Project Structure
+
+The project is organized into modular components for better debugging and understanding:
+
+```
+StreeRaksha/
+├── main.py               # Main application entry point
+├── detector.py           # Core detector module (contains StreeRakshaDetector class)
+├── pose_analyzer.py      # Pose analysis functionality
+├── gender_detector.py    # Gender detection module
+├── tracker.py            # Person tracking module
+├── alert_system.py       # Alert generation and risk assessment
+├── visualizer.py         # Visualization and UI rendering
+├── logger.py             # Logging functionality
+├── debugger.py           # Debug utilities
+├── reset_camera.py       # Camera reset utility
+├── requirements.txt      # Project dependencies
+├── yolov8n.pt            # YOLOv8 model file
+├── evidence/             # Saved evidence images and sensor data
+├── logs/                 # Application logs
+├── docs/                 # Documentation
+└── __pycache__/          # Python bytecode cache
+```
+
+## Module Descriptions
+
+- **main.py**: Entry point for the application that coordinates all components
+- **detector.py**: Main detector module that processes video frames and coordinates detection pipeline
+- **pose_analyzer.py**: Analyzes human poses to detect distress signals and vulnerable positions
+- **gender_detector.py**: Handles gender classification using neural networks or simulation
+- **tracker.py**: Tracks persons across video frames to maintain identity consistency
+- **alert_system.py**: Risk assessment and alert generation system
+- **visualizer.py**: Handles UI rendering and visualization
+- **logger.py**: Logging system for debugging and audit trails
+- **debugger.py**: Debug utilities for development and testing
+- **reset_camera.py**: Utility to reset camera connections when issues occur
+
 ## Core Features
 
 ### 1. Real-Time Threat Detection (AI + IoT)
@@ -97,19 +134,26 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 # Install dependencies
 pip install -r requirements.txt
 
-# Configure environment variables
-cp .env.example .env
-# Edit .env with your configurations
+# Configure environment variables (if needed)
 ```
 
 ### Running the Application
 
 ```bash
-# Start the backend server
-python app.py
+# Run the main application
+python main.py
 
-# For edge devices (Raspberry Pi)
-python edge_node.py --camera_id=0
+# To debug or reset the camera if issues occur
+python reset_camera.py
+```
+
+### Development
+
+For development with enhanced logging and debug visualizations:
+
+```python
+# In main.py
+debugger.debug_overlay = True  # Enable debug overlay
 ```
 
 ## Project Structure
