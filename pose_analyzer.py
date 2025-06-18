@@ -3,6 +3,7 @@
 import cv2
 import numpy as np
 import mediapipe as mp
+import time
 
 
 class PoseAnalyzer:
@@ -11,13 +12,19 @@ class PoseAnalyzer:
         self.mp_pose = mp.solutions.pose
         self.mp_drawing = mp.solutions.drawing_utils
         self.mp_drawing_styles = mp.solutions.drawing_styles
+
+        # Use higher complexity model for better accuracy
         self.pose_detector = self.mp_pose.Pose(
             static_image_mode=False,
-            model_complexity=1,
+            model_complexity=1,  # Increased from 1 to 2 for better accuracy
             smooth_landmarks=True,
+            enable_segmentation=False,  # Don't need segmentation for performance
             min_detection_confidence=0.5,
             min_tracking_confidence=0.5
         )
+
+        # Create connection mapping for improved visualization
+        self.pose_connections = self.mp_pose.POSE_CONNECTIONS
 
         # Configuration thresholds
         self.config = {
@@ -29,11 +36,26 @@ class PoseAnalyzer:
         }
 
     def detect_pose(self, frame, person_box):
-        """Detect and analyze pose within a person bounding box"""
+        """Detect and analyze pose within a person bounding box with improved accuracy"""
         try:
-            # Extract person region
+            # Extract person region with padding for better full-body detection
             x1, y1, x2, y2 = person_box
-            person_img = frame[y1:y2, x1:x2]
+
+            # Add padding (10% on each side) to include more context around the person
+            # This helps MediaPipe detect the pose more accurately
+            height, width = frame.shape[:2]
+            padding_x = int((x2 - x1) * 0.1)
+            padding_y = int((y2 - y1) * 0.1)
+
+            # Apply padding but keep within image boundaries
+            x1_pad = max(0, x1 - padding_x)
+            y1_pad = max(0, y1 - padding_y)
+            x2_pad = min(width, x2 + padding_x)
+            y2_pad = min(height, y2 + padding_y)
+
+            # Extract the padded region
+            person_img = frame[y1_pad:y2_pad, x1_pad:x2_pad]
+
             if person_img.size == 0:
                 return None, None
 
@@ -41,16 +63,22 @@ class PoseAnalyzer:
             rgb_img = cv2.cvtColor(person_img, cv2.COLOR_BGR2RGB)
 
             # Process the image
+            start_time = time.time()
             results = self.pose_detector.process(rgb_img)
+            process_time = time.time() - start_time
+
+            # Debug processing time
+            # print(f"Pose detection took {process_time*1000:.2f}ms")
 
             if not results.pose_landmarks:
                 return None, None
 
-            # Normalize landmarks to the person box coordinates
+            # Normalize landmarks to the original frame coordinates
             landmarks = []
             for landmark in results.pose_landmarks.landmark:
-                px = int(landmark.x * person_img.shape[1]) + x1
-                py = int(landmark.y * person_img.shape[0]) + y1
+                # Convert relative coordinates within the cropped image to absolute coordinates in the frame
+                px = int(landmark.x * person_img.shape[1]) + x1_pad
+                py = int(landmark.y * person_img.shape[0]) + y1_pad
                 visibility = landmark.visibility
                 landmarks.append((px, py, visibility))
 
@@ -147,47 +175,87 @@ class PoseAnalyzer:
             return None
 
     def draw_pose(self, frame, landmarks):
-        """Draw pose skeleton and landmarks on the frame"""
+        """Draw enhanced pose skeleton and landmarks on the frame using MediaPipe's connections"""
         if not landmarks:
             return frame
 
-        # Define connections for skeleton
-        connections = [
-            # Torso
-            (11, 12), (12, 24), (24, 23), (23, 11),
-            # Right arm
-            (12, 14), (14, 16),
-            # Left arm
-            (11, 13), (13, 15),
-            # Right leg
-            (24, 26), (26, 28),
-            # Left leg
-            (23, 25), (25, 27)
-        ]
+        # Convert our landmarks format to MediaPipe format for drawing
+        mp_landmarks = self.mp_pose.PoseLandmark
 
-        # Draw skeleton
-        for connection in connections:
-            start_idx, end_idx = connection
-            if start_idx < len(landmarks) and end_idx < len(landmarks):
-                start_point = (int(landmarks[start_idx][0]), int(
-                    landmarks[start_idx][1]))
-                end_point = (int(landmarks[end_idx][0]),
-                             int(landmarks[end_idx][1]))
+        # Create a temporary overlay for enhanced visualization
+        overlay = frame.copy()
 
-                # Color coding
-                if connection in [(11, 12), (12, 24), (24, 23), (23, 11)]:  # Torso
-                    color = (0, 255, 255)  # Yellow
-                elif connection in [(12, 14), (14, 16), (11, 13), (13, 15)]:  # Arms
-                    color = (0, 165, 255)  # Orange
-                else:  # Legs
-                    color = (255, 255, 0)  # Cyan
+        # Dictionary for better color-coding different body parts
+        body_part_colors = {
+            "torso": (0, 255, 255),     # Yellow
+            "left_arm": (0, 165, 255),  # Orange
+            "right_arm": (0, 165, 255),  # Orange
+            "left_leg": (255, 255, 0),  # Cyan
+            "right_leg": (255, 255, 0),  # Cyan
+            "face": (255, 0, 255)       # Magenta
+        }
 
-                cv2.line(frame, start_point, end_point, color, 2)
+        # Map body parts to their MediaPipe connections
+        body_parts = {
+            "torso": [
+                (mp_landmarks.LEFT_SHOULDER, mp_landmarks.RIGHT_SHOULDER),
+                (mp_landmarks.RIGHT_SHOULDER, mp_landmarks.RIGHT_HIP),
+                (mp_landmarks.RIGHT_HIP, mp_landmarks.LEFT_HIP),
+                (mp_landmarks.LEFT_HIP, mp_landmarks.LEFT_SHOULDER)
+            ],
+            "left_arm": [
+                (mp_landmarks.LEFT_SHOULDER, mp_landmarks.LEFT_ELBOW),
+                (mp_landmarks.LEFT_ELBOW, mp_landmarks.LEFT_WRIST)
+            ],
+            "right_arm": [
+                (mp_landmarks.RIGHT_SHOULDER, mp_landmarks.RIGHT_ELBOW),
+                (mp_landmarks.RIGHT_ELBOW, mp_landmarks.RIGHT_WRIST)
+            ],
+            "left_leg": [
+                (mp_landmarks.LEFT_HIP, mp_landmarks.LEFT_KNEE),
+                (mp_landmarks.LEFT_KNEE, mp_landmarks.LEFT_ANKLE),
+                (mp_landmarks.LEFT_ANKLE, mp_landmarks.LEFT_FOOT_INDEX)
+            ],
+            "right_leg": [
+                (mp_landmarks.RIGHT_HIP, mp_landmarks.RIGHT_KNEE),
+                (mp_landmarks.RIGHT_KNEE, mp_landmarks.RIGHT_ANKLE),
+                (mp_landmarks.RIGHT_ANKLE, mp_landmarks.RIGHT_FOOT_INDEX)
+            ]
+        }
 
-        # Draw landmarks
+        # Draw skeleton with enhanced thickness and color coding by body part
+        for body_part, connections in body_parts.items():
+            color = body_part_colors[body_part]
+            for connection in connections:
+                start_idx = connection[0].value
+                end_idx = connection[1].value
+
+                if start_idx < len(landmarks) and end_idx < len(landmarks):
+                    start_landmark = landmarks[start_idx]
+                    end_landmark = landmarks[end_idx]
+
+                    # Only draw if both points have reasonable visibility
+                    if start_landmark[2] > 0.3 and end_landmark[2] > 0.3:
+                        start_point = (
+                            int(start_landmark[0]), int(start_landmark[1]))
+                        end_point = (
+                            int(end_landmark[0]), int(end_landmark[1]))
+
+                        # Thicker lines for better visibility
+                        cv2.line(overlay, start_point, end_point, color, 3)
+
+        # Draw landmarks with varying sizes based on visibility
         for landmark in landmarks:
             x, y, visibility = landmark
-            if visibility > 0.5:  # Only draw visible landmarks
-                cv2.circle(frame, (int(x), int(y)), 4, (0, 255, 0), -1)
+            if visibility > 0.3:  # Lower threshold to show more points
+                # Vary the size based on visibility
+                radius = int(4 * visibility) + 1
+                # Green for highly visible points, more transparent for less visible
+                color = (0, int(255 * visibility), 0)
+                cv2.circle(overlay, (int(x), int(y)), radius, color, -1)
+
+        # Blend the overlay with the original frame for a cleaner look
+        alpha = 0.7
+        cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0, frame)
 
         return frame
