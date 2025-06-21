@@ -38,7 +38,7 @@ StreeRaksha/
 - **detector.py**: Main detector module that processes video frames and coordinates detection pipeline
 - **pose_analyzer.py**: Analyzes human poses to detect distress signals and vulnerable positions
 - **gender_detector.py**: Handles gender classification using neural networks or simulation
-- **tracker.py**: Tracks persons across video frames to maintain identity consistency
+- **tracker.py**: Tracks persons across video frames to maintain identity consistency with periodic gender reclassification
 - **alert_system.py**: Risk assessment and alert generation system
 - **visualizer.py**: Handles UI rendering and visualization
 - **logger.py**: Logging system for debugging and audit trails
@@ -47,33 +47,43 @@ StreeRaksha/
 
 ## Core Features
 
-### 1. Real-Time Threat Detection (AI + IoT)
+### 1. Periodic Gender Reclassification
+
+The system implements an advanced gender reclassification mechanism to improve accuracy over time:
+
+- Automatically re-evaluates gender classification every 3 seconds
+- Refreshes more frequently for low confidence detections
+- Applies hysteresis to prevent gender flip-flopping
+- Maintains gender classification history for improved stability
+- Requires higher confidence thresholds to change established gender classifications
+
+### 2. Real-Time Threat Detection (AI + IoT)
 
 - AI-powered video analysis using computer vision models
 - Edge processing via Raspberry Pi 5 nodes
 - Detection of gender, crowd density, distress gestures, and environmental context
 - Low-latency parallel processing for immediate response
 
-### 2. Predictive Safety Analytics
+### 3. Predictive Safety Analytics
 
 - Real-time safety ratings with color-coded zones (Red/Yellow/Green)
 - Safe route suggestions for high-risk areas
 - Personal dashboard for tracking safety trends
 
-### 3. Intelligent Alert System & Evidence Collection
+### 4. Intelligent Alert System & Evidence Collection
 
 - Automated real-time alerts for security personnel
 - User-reported incident tracking
 - Evidence capture and storage for verification
 
-### 4. Actionable Insights Dashboard
+### 5. Actionable Insights Dashboard
 
 - Real-time alerts for authorities
 - Live feed monitoring
 - Incident logging and response workflow
 - Interactive map visualization
 
-### 5. Mobile App Features
+### 6. Mobile App Features
 
 - Quick SOS button with location sharing
 - Customizable alert settings

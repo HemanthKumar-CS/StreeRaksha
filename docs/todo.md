@@ -4,6 +4,12 @@ This file tracks the core development tasks for the StreeRaksha platform. All so
 
 ---
 
+## Completed Tasks
+
+- [x] Implement periodic gender re-classification to improve detection accuracy and stability over time.
+- [x] Add hysteresis to gender detection to prevent frequent changes in classification.
+- [x] Improve tracking to maintain consistent person identities across frames.
+
 ## 1. Edge Device (Raspberry Pi 5) Integration
 
 - [ ] Port and optimize detection code to run efficiently on Raspberry Pi 5.

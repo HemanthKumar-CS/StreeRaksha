@@ -16,6 +16,15 @@ class PersonTracker:
         self.MAX_TRACK_DISTANCE = max_track_distance
         self.MIN_SIZE = 60  # Minimum person size to match the original StreeRakshaDetector
 
+        # Gender reclassification parameters
+        # Standard interval: Re-classify gender every 3 seconds
+        self.GENDER_REFRESH_INTERVAL = 3.0
+        # Confidence threshold: Re-classify sooner if confidence is below this
+        self.GENDER_REFRESH_THRESHOLD = 0.8
+        # Multiplier for low confidence refresh (half the normal interval)
+        self.GENDER_REFRESH_LOW_CONF_MULTIPLIER = 0.5
+        self.GENDER_MIN_CONFIDENCE = 0.6  # Minimum confidence required to update gender
+
     def calculate_iou(self, box1, box2):
         """Calculate Intersection over Union (IoU) between two bounding boxes"""
         # Extract coordinates
@@ -130,17 +139,70 @@ class PersonTracker:
                         (distance < self.MAX_TRACK_DISTANCE * 0.4 and iou > 0.05)):
                     best_iou = iou
                     best_match_id = track_id
-                    best_match_distance = distance
-
-            # Update matched tracker
+                    best_match_distance = distance            # Update matched tracker
             if best_match_id is not None:
-                self.trackers[best_match_id]['bbox'] = detection_box
-                self.trackers[best_match_id]['ttl'] = self.TRACK_EXPIRATION
+                tracker = self.trackers[best_match_id]
+                tracker['bbox'] = detection_box
+                tracker['ttl'] = self.TRACK_EXPIRATION
+                # Enhanced periodic gender re-classification:
+                # Check if we should re-classify gender based on time and previous confidence
+                current_time = time.time()
+                time_since_update = current_time - \
+                    tracker.get('last_gender_update', 0)
+                gender_confidence = tracker.get('gender_confidence', 0.0)
+
+                # Determine if re-classification is needed:
+                # 1. Standard interval has passed
+                # 2. Low confidence in current gender + half the standard interval has passed
+                # 3. Person has changed significantly (area/proportion change > 20%)
+                should_refresh = (
+                    time_since_update > self.GENDER_REFRESH_INTERVAL or
+                    (gender_confidence < self.GENDER_REFRESH_THRESHOLD and
+                     time_since_update > self.GENDER_REFRESH_INTERVAL * self.GENDER_REFRESH_LOW_CONF_MULTIPLIER)
+                )
+
+                if should_refresh and gender_detector is not None:
+                    x1, y1, x2, y2 = detection_box
+                    # Extract person image for updated gender analysis
+                    person_img = frame[y1:y2,
+                                       x1:x2] if y2 > y1 and x2 > x1 else None
+
+                    if person_img is not None and person_img.size > 0:
+                        new_gender, new_confidence = gender_detector.predict(
+                            person_img)
+
+                        # Track confidence history for more stable classifications
+                        old_gender = tracker.get('gender', 'Unknown')
+                        old_confidence = tracker.get('gender_confidence', 0.0)
+
+                        # Only update if the new classification meets our confidence threshold
+                        # or if it's the same gender as before with reasonable confidence
+                        if (new_confidence > self.GENDER_MIN_CONFIDENCE or
+                                (new_gender == old_gender and new_confidence > old_confidence * 0.8)):
+
+                            # Apply hysteresis to prevent gender flip-flopping
+                            # If changing from one gender to another, require higher confidence
+                            if new_gender != old_gender and old_confidence > 0.7:
+                                # Need 20% higher confidence to change an established gender
+                                confidence_threshold = old_confidence * 1.2
+                                if new_confidence > confidence_threshold:
+                                    tracker['gender'] = new_gender
+                                    tracker['gender_confidence'] = new_confidence
+                            else:
+                                tracker['gender'] = new_gender
+                                tracker['gender_confidence'] = new_confidence
+
+                            tracker['last_gender_update'] = current_time
+                            tracker['gender_history'] = tracker.get(
+                                'gender_history', []) + [(new_gender, new_confidence)]
+                            # Keep only the last 5 classifications
+                            if len(tracker['gender_history']) > 5:
+                                tracker['gender_history'] = tracker['gender_history'][-5:]
+
                 unmatched_trackers.remove(best_match_id)
                 matched_detections.append(detection_box)
             else:
-                # Create new tracker for unmatched detection
-                # Extract person image for gender analysis
+                # Create new tracker for unmatched detection                # Extract person image for gender analysis
                 x1, y1, x2, y2 = detection_box
                 person_img = frame[y1:y2,
                                    x1:x2] if y2 > y1 and x2 > x1 else None
@@ -156,7 +218,8 @@ class PersonTracker:
                     'gender': gender,
                     'gender_confidence': confidence,
                     'last_gender_update': time.time(),
-                    'track_id': self.next_track_id
+                    'track_id': self.next_track_id,
+                    'gender_history': [(gender, confidence)]
                 }
 
                 self.next_track_id += 1
@@ -180,7 +243,9 @@ class PersonTracker:
                 'bbox': tracker['bbox'],
                 'gender': tracker['gender'],
                 'gender_confidence': tracker.get('gender_confidence', 0.0),
-                'ttl': tracker['ttl']
+                'ttl': tracker['ttl'],
+                'gender_history': tracker.get('gender_history', []),
+                'last_gender_update': tracker.get('last_gender_update', 0)
             }
             persons.append(person_info)
         return persons
